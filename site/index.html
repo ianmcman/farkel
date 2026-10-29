@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#282923">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Farkle">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="description" content="Farmer Farkle: the dice game for 1 to 4 players, or against a bot.">
+  <title>Farmer Farkle</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="app">
+    <section id="screen-start" class="screen">
+      <h1 class="title">Farmer Farkle</h1>
+      <p class="tagline">Roll six dice, set aside what scores, and bank the harvest before it spoils.</p>
+
+      <div id="resume-banner" class="card" hidden>
+        <h2 class="card-title">Game in progress</h2>
+        <p id="resume-details" class="muted"></p>
+        <div class="row">
+          <button type="button" id="btn-resume" class="btn btn-primary">Resume</button>
+          <button type="button" id="btn-discard" class="btn btn-outline">Discard</button>
+        </div>
+      </div>
+
+      <form id="setup-form" class="card">
+        <h2 class="card-title">Players</h2>
+        <div id="player-inputs" class="player-inputs"></div>
+        <div class="row">
+          <button type="button" id="btn-add" class="btn btn-outline">+ Add player</button>
+          <button type="button" id="btn-bot" class="btn btn-outline">Play vs bot</button>
+        </div>
+        <button type="submit" id="btn-start" class="btn btn-primary btn-large">Start game</button>
+      </form>
+      <button type="button" id="btn-rules-start" class="btn btn-secondary btn-link">How to play</button>
+    </section>
+
+    <section id="screen-game" class="screen game" hidden>
+      <div id="scoreboard" class="scoreboard"></div>
+      <div class="harvest">
+        <div class="harvest-label">This turn</div>
+        <div id="turn-score" class="harvest-score">0</div>
+        <p id="status" class="status" aria-live="polite"></p>
+      </div>
+      <div id="dice" class="dice"></div>
+      <div class="actions">
+        <button type="button" id="btn-roll" class="btn btn-primary btn-action">Roll</button>
+        <button type="button" id="btn-bank" class="btn btn-secondary btn-action">Bank</button>
+      </div>
+      <div class="bottom-bar">
+        <button type="button" id="btn-rules" class="bar-btn">Rules</button>
+        <button type="button" id="btn-menu" class="bar-btn">Menu</button>
+      </div>
+    </section>
+
+    <section id="screen-end" class="screen" hidden>
+      <h1 class="title" id="winner-text"></h1>
+      <div class="card">
+        <table class="standings"><thead><tr><th>#</th><th>Player</th><th>Score</th></tr></thead><tbody id="standings"></tbody></table>
+      </div>
+      <button type="button" id="btn-again" class="btn btn-primary btn-large">Play again</button>
+      <button type="button" id="btn-setup" class="btn btn-secondary btn-large">Change players</button>
+    </section>
+  </main>
+
+  <dialog id="rules-dialog" class="dialog">
+    <h2 class="card-title">How to play</h2>
+    <ul class="rules">
+      <li>Roll six dice. Tap the dice that score, then roll the rest or bank.</li>
+      <li>1 is 100, 5 is 50. Three of a kind is face x 100 (three 1s is 1000). Four, five or six of a kind: 1000, 2000, 3000.</li>
+      <li>1-2-3-4-5-6, three pairs, or four of a kind plus a pair: 1500. Two triples: 2500.</li>
+      <li>If a roll has nothing that scores, that is a Farkle and the turn's points are lost.</li>
+      <li>Score with all six dice for hot dice: roll all six again.</li>
+      <li>You need 500 in one turn to get on the board. First to 10,000 triggers one last turn for everyone else.</li>
+    </ul>
+    <button type="button" id="btn-close-rules" class="btn btn-primary btn-large">Got it</button>
+  </dialog>
+
+  <dialog id="menu-dialog" class="dialog">
+    <h2 class="card-title">Menu</h2>
+    <button type="button" id="btn-quit" class="btn btn-secondary btn-large">New game</button>
+    <button type="button" id="btn-close-menu" class="btn btn-outline btn-large">Back to the game</button>
+  </dialog>
+
+  <script src="score.js"></script>
+  <script src="game.js"></script>
+  <script src="bot.js"></script>
+  <script src="app.js"></script>
+  <script src="pwa.js"></script>
+</body>
+</html>
