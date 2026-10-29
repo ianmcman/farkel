@@ -39,7 +39,7 @@ test('create, join, start and play over HTTP', () => withServer(async base => {
 
 test('the event stream sends the player view and never other players\' tokens', () => withServer(async base => {
   const c = await (await post(base, '/api/rooms', { name: 'Ann' })).json();
-  const res = await fetch(`${base}/api/rooms/${c.code}/events?token=${c.token}`);
+  const res = await fetch(`${base}/api/rooms/${c.code}/events?watch=${c.watch}`);
   assert.equal(res.status, 200);
   const reader = res.body.getReader();
   const text = new TextDecoder().decode((await reader.read()).value);
@@ -47,9 +47,10 @@ test('the event stream sends the player view and never other players\' tokens', 
   const view = JSON.parse(text.replace(/^data: /, ''));
   assert.equal(view.phase, 'lobby');
   assert.equal(view.you, 0);
-  assert.ok(!text.includes(c.token));
+  assert.ok(!text.includes(c.token) && !text.includes(c.watch));
   assert.equal((await fetch(`${base}/api/rooms/${c.code}/events`)).status, 403);
-  assert.equal((await fetch(`${base}/api/rooms/ZZZZ/events?token=x`)).status, 404);
+  assert.equal((await fetch(`${base}/api/rooms/${c.code}/events?watch=${c.token}`)).status, 403);   // the action token is not a stream token
+  assert.equal((await fetch(`${base}/api/rooms/ZZZZ/events?watch=x`)).status, 404);
 }));
 
 test('rejects oversized and malformed bodies', () => withServer(async base => {
@@ -57,3 +58,17 @@ test('rejects oversized and malformed bodies', () => withServer(async base => {
   const bad = await fetch(base + '/api/rooms', { method: 'POST', body: '{nope' });
   assert.equal(bad.status, 400);
 }));
+
+test('room creation and joins are rate limited per client address', async () => {
+  const store = createRoomStore({ farkleDelayMs: null });
+  const s = createServer({ store, staticDir: path.join(__dirname, '..', 'site'), createLimit: 2, joinLimit: 3 });
+  await new Promise(r => s.listen(0, '127.0.0.1', r));
+  try {
+    const base = `http://127.0.0.1:${s.address().port}`;
+    const a = await (await post(base, '/api/rooms', { name: 'A' })).json();
+    assert.equal((await post(base, '/api/rooms', { name: 'B' })).status, 201);
+    assert.equal((await post(base, '/api/rooms', { name: 'C' })).status, 429);
+    for (let i = 0; i < 3; i++) await post(base, '/api/rooms/ZZZZ/join', { name: 'x' });
+    assert.equal((await post(base, `/api/rooms/${a.code}/join`, { name: 'Z' })).status, 429);
+  } finally { s.closeAllConnections(); s.close(); }
+});

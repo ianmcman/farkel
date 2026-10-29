@@ -35,14 +35,41 @@ function readJsonBody(req) {
   });
 }
 
-function createServer({ store, staticDir }) {
+// Behind a reverse proxy the socket peer is the proxy; trust X-Real-IP only from configured proxy addresses.
+function makeClientIp(trusted) {
+  const set = new Set(trusted);
+  return req => {
+    const peer = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+    const fwd = req.headers['x-real-ip'];
+    return set.has(peer) && typeof fwd === 'string' && fwd ? fwd.trim() : peer;
+  };
+}
+
+function createLimiter(max, windowMs) {
+  const hits = new Map();
+  return key => {
+    const t = Date.now();
+    const list = (hits.get(key) || []).filter(x => x > t - windowMs);
+    if (list.length >= max) { hits.set(key, list); return false; }
+    list.push(t);
+    hits.set(key, list);
+    if (hits.size > 5000) for (const [k, v] of hits) if (!v.length || v[v.length - 1] <= t - windowMs) hits.delete(k);
+    return true;
+  };
+}
+
+function createServer({ store, staticDir, trustedProxies = [], createLimit = 10, joinLimit = 40 }) {
   const root = path.resolve(staticDir);
+  const clientIp = makeClientIp(trustedProxies);
+  const allowCreate = createLimiter(createLimit, 60 * 60e3);
+  const allowJoin = createLimiter(joinLimit, 15 * 60e3);
 
   async function api(req, res, pathname, url) {
     const method = req.method;
     const tokenOf = () => req.headers['x-token'];
     try {
       if (method === 'POST' && pathname === '/api/rooms') {
+        if (!allowCreate(clientIp(req))) return sendJson(res, 429, { error: 'Too many rooms from this address. Try again later.' });
         const body = await readJsonBody(req);
         return sendJson(res, 201, store.create(body.name));
       }
@@ -50,6 +77,7 @@ function createServer({ store, staticDir }) {
       if (!m) return sendJson(res, 404, { error: 'Not Found' });
       const code = decodeURIComponent(m[1]);
       if (method === 'POST' && m[2] === 'join') {
+        if (!allowJoin(clientIp(req))) return sendJson(res, 429, { error: 'Too many join attempts. Try again in a few minutes.' });
         const body = await readJsonBody(req);
         return sendJson(res, 200, store.join(code, body.name));
       }
@@ -63,7 +91,7 @@ function createServer({ store, staticDir }) {
         store.act(code, tokenOf(), body);
         return sendJson(res, 200, {});
       }
-      if (method === 'GET' && m[2] === 'events') return events(req, res, code, url.searchParams.get('token'));
+      if (method === 'GET' && m[2] === 'events') return events(req, res, code, url.searchParams.get('watch'));
       return sendJson(res, 404, { error: 'Not Found' });
     } catch (err) {
       sendJson(res, err.status || 500, { error: err.status ? err.message : 'Internal error' });
@@ -133,5 +161,6 @@ if (require.main === module) {
   const store = createRoomStore();
   setInterval(() => store.sweep(), 10 * 60 * 1000).unref();
   const port = Number(process.env.PORT) || 8080;
-  createServer({ store, staticDir: path.join(__dirname, '..', 'site') }).listen(port, '0.0.0.0', () => console.log(`Farkel listening on ${port}`));
+  const trustedProxies = (process.env.TRUSTED_PROXY || '').split(',').map(x => x.trim()).filter(Boolean);
+  createServer({ store, staticDir: path.join(__dirname, '..', 'site'), trustedProxies }).listen(port, '0.0.0.0', () => console.log(`Farkel listening on ${port}`));
 }

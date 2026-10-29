@@ -51,8 +51,8 @@ function createRoomStore(options = {}) {
     if (rooms.size >= MAX_ROOMS) throw httpError(503, 'Too many rooms right now. Try again later.');
     const code = generateCode();
     const token = newToken();
-    rooms.set(code, { code, phase: 'lobby', players: [{ name: validName, token }], game: null, lastActivity: now(), subscribers: new Set(), timer: null });
-    return { code, token };
+    rooms.set(code, { code, phase: 'lobby', players: [{ name: validName, token, watch: newToken() }], game: null, lastActivity: now(), subscribers: new Set(), timer: null });
+    return { code, token, watch: rooms.get(code).players[0].watch };
   }
 
   function join(code, name) {
@@ -60,10 +60,11 @@ function createRoomStore(options = {}) {
     if (room.phase !== 'lobby') throw httpError(409, 'Cannot join game in progress');
     if (room.players.length >= 4) throw httpError(409, 'Room is full');
     const token = newToken();
-    room.players.push({ name: cleanName(name), token });
+    const watch = newToken();
+    room.players.push({ name: cleanName(name), token, watch });
     room.lastActivity = now();
     notify(room);
-    return { token };
+    return { token, watch };
   }
 
   function playerIndex(room, token) {
@@ -137,9 +138,11 @@ function createRoomStore(options = {}) {
     notify(room);
   }
 
-  function view(code, token) {
+  // The event stream goes in a URL, so it takes a read-only `watch` token; only `token` can act.
+  function view(code, watch) {
     const room = getRoom(code);
-    const idx = playerIndex(room, token);
+    const idx = room.players.findIndex(p => p.watch === watch);
+    if (idx === -1) throw httpError(403, 'Invalid token');
     return {
       code: room.code,
       phase: room.phase,
@@ -159,7 +162,8 @@ function createRoomStore(options = {}) {
   function sweep() {
     const t = now();
     for (const [code, room] of rooms) {
-      if (t - room.lastActivity > 2 * 60 * 60 * 1000) {
+      const idle = t - room.lastActivity;
+      if (idle > 2 * 60 * 60 * 1000 || (room.phase === 'lobby' && idle > 30 * 60 * 1000)) {
         clearTimeout(room.timer);
         rooms.delete(code);
       }

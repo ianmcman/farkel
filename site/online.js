@@ -34,23 +34,23 @@
     try { return (await fetch('/healthz')).ok; } catch { return false; }
   }
 
-  function connect(code, token) {
+  function connect(code, watch) {
     if (source) source.close();
-    source = new EventSource(`/api/rooms/${encodeURIComponent(code)}/events?token=${encodeURIComponent(token)}`);
+    source = new EventSource(`/api/rooms/${encodeURIComponent(code)}/events?watch=${encodeURIComponent(watch)}`);
     source.onopen = () => { $('reconnecting').hidden = true; };
     source.onmessage = e => {
       $('reconnecting').hidden = true;
       try { onView(JSON.parse(e.data)); } catch (err) { console.error('Bad event', err); }
     };
-    source.onerror = () => { $('reconnecting').hidden = false; probe(code, token); };
+    source.onerror = () => { $('reconnecting').hidden = false; probe(code, watch); };
   }
 
   // EventSource retries on its own; this only notices a room that is gone.
-  async function probe(code, token) {
+  async function probe(code, watch) {
     if (checking) return;
     checking = true;
     try {
-      const res = await fetch(`/api/rooms/${encodeURIComponent(code)}/events?token=${encodeURIComponent(token)}`);
+      const res = await fetch(`/api/rooms/${encodeURIComponent(code)}/events?watch=${encodeURIComponent(watch)}`);
       if (res.status === 404 || res.status === 403) leave('That room has expired or no longer exists.');
       if (res.body) res.body.cancel();
     } catch { /* still offline */ } finally { checking = false; }
@@ -108,10 +108,10 @@
   }
 
   function enter(res) {
-    session = { code: res.code, token: res.token };
+    session = { code: res.code, token: res.token, watch: res.watch };
     store.set(KEY_SESSION, session);
     history.replaceState(null, '', '#' + res.code);
-    connect(res.code, res.token);
+    connect(res.code, res.watch);
   }
 
   async function openOnline(code) {
@@ -153,7 +153,7 @@
     $('btn-join-room').disabled = true;
     try {
       const res = await api(`/api/rooms/${encodeURIComponent(code)}/join`, { name: n });
-      enter({ code, token: res.token });
+      enter({ code, token: res.token, watch: res.watch });
     } catch (err) { show($('online-error'), err.message); } finally { $('btn-join-room').disabled = false; }
   });
 
@@ -173,9 +173,9 @@
   // Resume a room after a reload, or open an invite link.
   const saved = store.get(KEY_SESSION);
   const hashCode = (location.hash || '').slice(1).toUpperCase();
-  if (saved && saved.code && saved.token && (!hashCode || hashCode === saved.code)) {
+  if (saved && saved.code && saved.token && saved.watch && (!hashCode || hashCode === saved.code)) {
     session = saved;
-    connect(saved.code, saved.token);
+    connect(saved.code, saved.watch);
   } else if (/^[A-Z2-9]{4}$/.test(hashCode)) {
     openOnline(hashCode);
   }

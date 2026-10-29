@@ -9,7 +9,7 @@ function room(rng, opts = {}) {
   const a = s.create('Ann');
   const b = s.join(a.code, 'Bob');
   s.start(a.code, a.token);
-  return { s, code: a.code, A: a.token, B: b.token };
+  return { s, code: a.code, A: a.token, B: b.token, AW: a.watch, BW: b.watch };
 }
 
 test('only the host starts, and needs two players', () => {
@@ -33,39 +33,39 @@ test('names are trimmed and limited', () => {
   const s = createRoomStore();
   assert.throws(() => s.create('   '), /empty/);
   const a = s.create('  ' + 'x'.repeat(30));
-  assert.equal(s.view(a.code, a.token).players[0].name.length, 20);
+  assert.equal(s.view(a.code, a.watch).players[0].name.length, 20);
 });
 
 test('turn order is enforced and a full turn banks to the next player', () => {
-  const { s, code, A, B } = room(seq([1, 1, 1, 2, 3, 4]));
+  const { s, code, A, B, BW } = room(seq([1, 1, 1, 2, 3, 4]));
   assert.throws(() => s.act(code, B, { type: 'roll' }), /Not your turn/);
   s.act(code, A, { type: 'roll' });
   [0, 1, 2].forEach(i => s.act(code, A, { type: 'select', index: i }));
   s.act(code, A, { type: 'bank' });
-  const v = s.view(code, B);
+  const v = s.view(code, BW);
   assert.equal(v.game.current, 1);
   assert.equal(v.game.players[0].total, 1000);
   s.act(code, B, { type: 'roll' });
 });
 
 test('keep locks the selection and rolls the rest', () => {
-  const { s, code, A } = room(seq([1, 5, 2, 3, 4, 6, 2, 2, 2, 6]));
+  const { s, code, A, AW } = room(seq([1, 5, 2, 3, 4, 6, 2, 2, 2, 6]));
   s.act(code, A, { type: 'roll' });
   s.act(code, A, { type: 'select', index: 0 });
   s.act(code, A, { type: 'keep' });
-  const g = s.view(code, A).game;
+  const g = s.view(code, AW).game;
   assert.equal(g.turnScore, 100);
   assert.deepEqual(g.locked.slice(0, 2), [true, false]);
 });
 
 test('a farkle clears itself after the delay', async () => {
-  const { s, code, A } = room(seq([2, 3, 4, 6, 2, 3]), { farkleDelayMs: 20 });
+  const { s, code, A, AW } = room(seq([2, 3, 4, 6, 2, 3]), { farkleDelayMs: 20 });
   let n = 0;
   s.subscribe(code, () => n++);
   s.act(code, A, { type: 'roll' });
-  assert.equal(s.view(code, A).game.phase, 'farkled');
+  assert.equal(s.view(code, AW).game.phase, 'farkled');
   await new Promise(r => setTimeout(r, 80));
-  const g = s.view(code, A).game;
+  const g = s.view(code, AW).game;
   assert.equal(g.phase, 'roll');
   assert.equal(g.current, 1);
   assert.ok(n >= 2);
@@ -83,5 +83,15 @@ test('sweep removes idle rooms', () => {
   const a = s.create('Ann');
   t = 3 * 60 * 60 * 1000;
   s.sweep();
-  assert.throws(() => s.view(a.code, a.token), /not found/);
+  assert.throws(() => s.view(a.code, a.watch), /not found/);
+});
+
+test('the action token does not open the event stream, and idle lobbies are swept early', () => {
+  let t = 0;
+  const s = createRoomStore({ now: () => t });
+  const a = s.create('Ann');
+  assert.throws(() => s.view(a.code, a.token), /Invalid token/);
+  t = 31 * 60 * 1000;
+  s.sweep();
+  assert.throws(() => s.view(a.code, a.watch), /not found/);
 });
