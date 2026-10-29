@@ -84,6 +84,7 @@ test('failed token lookups are limited and a missing room looks like a wrong tok
     for (let i = 0; i < 3; i++) seen.push((await post(base, '/api/rooms/ZZZZ/act', { type: 'roll' }, 'x')).status);
     seen.push((await post(base, `/api/rooms/${a.code}/act`, { type: 'roll' }, 'wrong')).status);
     assert.deepEqual(seen, [403, 403, 403, 429]);
+    assert.equal((await post(base, `/api/rooms/${a.code}/act`, { type: 'roll' }, a.token)).status, 409);    // a valid token is never refused: this room is still in its lobby
   } finally { s.closeAllConnections(); s.close(); }
 });
 

@@ -57,20 +57,21 @@ function limitKey(ip) {
   return full.slice(0, 4).map(g => parseInt(g || '0', 16).toString(16)).join(':') + '::/64';
 }
 
-// ok(key) only looks; add(key) records a hit. Callers record only what they mean to count.
+// ok(key) only reads; add(key) records a hit. Callers record only what they mean to count.
 function createLimiter(max, windowMs) {
   const hits = new Map();
   const recent = key => {
-    const t = Date.now();
-    const list = (hits.get(key) || []).filter(x => x > t - windowMs);
-    hits.set(key, list);
-    return list;
+    const cut = Date.now() - windowMs;
+    return (hits.get(key) || []).filter(x => x > cut);
   };
   return {
     ok: key => recent(key).length < max,
     add: key => {
-      recent(key).push(Date.now());
-      if (hits.size > 5000) for (const [k, v] of hits) if (!v.length || v[v.length - 1] <= Date.now() - windowMs) hits.delete(k);
+      const list = recent(key);
+      list.push(Date.now());
+      hits.delete(key);                                     // re-insert so the oldest keys come first
+      hits.set(key, list);
+      if (hits.size > 5000) for (const [k, v] of hits) if (v[v.length - 1] <= Date.now() - windowMs) hits.delete(k);
       while (hits.size > 20000) hits.delete(hits.keys().next().value);      // hard cap on memory
     }
   };
@@ -99,11 +100,12 @@ function createServer({ store, staticDir, trustedProxies = [], createLimit = 10,
       if (!m) return sendJson(res, 404, { error: 'Not Found' });
       const code = decodeURIComponent(m[1]);
       if (m[2] !== 'join') {
-        // start, act and events answer 403 whether the room is missing or the token is wrong, and failures count against the client.
-        const ip = clientIp(req);
-        if (!allowGuess.ok(ip)) return sendJson(res, 429, { error: 'Too many failed requests. Try again in a few minutes.' });
+        // start, act and events answer 403 whether the room is missing or the token is wrong. Failures count against the
+        // client; a request with a valid token is never refused, so one bad address cannot lock out players behind it.
         try { return await tokenRoute(req, res, m[2], code, url); } catch (err) {
           if (err.status === 404 || err.status === 403) {
+            const ip = clientIp(req);
+            if (!allowGuess.ok(ip)) return sendJson(res, 429, { error: 'Too many failed requests. Try again in a few minutes.' });
             allowGuess.add(ip);
             return sendJson(res, 403, { error: 'Invalid token' });
           }
