@@ -57,17 +57,22 @@ function limitKey(ip) {
   return full.slice(0, 4).map(g => parseInt(g || '0', 16).toString(16)).join(':') + '::/64';
 }
 
+// ok(key) only looks; add(key) records a hit. Callers record only what they mean to count.
 function createLimiter(max, windowMs) {
   const hits = new Map();
-  return key => {
+  const recent = key => {
     const t = Date.now();
     const list = (hits.get(key) || []).filter(x => x > t - windowMs);
-    if (list.length >= max) { hits.set(key, list); return false; }
-    list.push(t);
     hits.set(key, list);
-    if (hits.size > 5000) for (const [k, v] of hits) if (!v.length || v[v.length - 1] <= t - windowMs) hits.delete(k);
-    while (hits.size > 20000) hits.delete(hits.keys().next().value);      // hard cap on memory
-    return true;
+    return list;
+  };
+  return {
+    ok: key => recent(key).length < max,
+    add: key => {
+      recent(key).push(Date.now());
+      if (hits.size > 5000) for (const [k, v] of hits) if (!v.length || v[v.length - 1] <= Date.now() - windowMs) hits.delete(k);
+      while (hits.size > 20000) hits.delete(hits.keys().next().value);      // hard cap on memory
+    }
   };
 }
 
@@ -76,14 +81,17 @@ function createServer({ store, staticDir, trustedProxies = [], createLimit = 10,
   const clientIp = makeClientIp(trustedProxies);
   const allowCreate = createLimiter(createLimit, 60 * 60e3);
   const allowJoin = createLimiter(joinLimit, 15 * 60e3);
-  const allowCreateAll = createLimiter(createLimit * 6, 60 * 60e3);      // one cap for everyone together
+  const allowCreateAll = createLimiter(createLimit * 20, 60 * 60e3);     // one cap for everyone together; it takes 20 addresses to reach it
   const allowGuess = createLimiter(joinLimit, 15 * 60e3);               // failed token or room lookups on the other routes
 
   async function api(req, res, pathname, url) {
     const method = req.method;
     try {
       if (method === 'POST' && pathname === '/api/rooms') {
-        if (!allowCreateAll('all') || !allowCreate(clientIp(req))) return sendJson(res, 429, { error: 'Too many rooms from this address. Try again later.' });
+        const ip = clientIp(req);
+        if (!allowCreate.ok(ip) || !allowCreateAll.ok('all')) return sendJson(res, 429, { error: 'Too many rooms right now. Try again later.' });
+        allowCreate.add(ip);
+        allowCreateAll.add('all');
         const body = await readJsonBody(req);
         return sendJson(res, 201, store.create(body.name));
       }
@@ -92,16 +100,20 @@ function createServer({ store, staticDir, trustedProxies = [], createLimit = 10,
       const code = decodeURIComponent(m[1]);
       if (m[2] !== 'join') {
         // start, act and events answer 403 whether the room is missing or the token is wrong, and failures count against the client.
+        const ip = clientIp(req);
+        if (!allowGuess.ok(ip)) return sendJson(res, 429, { error: 'Too many failed requests. Try again in a few minutes.' });
         try { return await tokenRoute(req, res, m[2], code, url); } catch (err) {
           if (err.status === 404 || err.status === 403) {
-            if (!allowGuess(clientIp(req))) return sendJson(res, 429, { error: 'Too many failed requests. Try again in a few minutes.' });
+            allowGuess.add(ip);
             return sendJson(res, 403, { error: 'Invalid token' });
           }
           throw err;
         }
       }
       if (method === 'POST' && m[2] === 'join') {
-        if (!allowJoin(clientIp(req))) return sendJson(res, 429, { error: 'Too many join attempts. Try again in a few minutes.' });
+        const ip = clientIp(req);
+        if (!allowJoin.ok(ip)) return sendJson(res, 429, { error: 'Too many join attempts. Try again in a few minutes.' });
+        allowJoin.add(ip);
         const body = await readJsonBody(req);
         return sendJson(res, 200, store.join(code, body.name));
       }

@@ -86,3 +86,15 @@ test('failed token lookups are limited and a missing room looks like a wrong tok
     assert.deepEqual(seen, [403, 403, 403, 429]);
   } finally { s.closeAllConnections(); s.close(); }
 });
+
+test('a blocked client does not use up the shared room-creation cap', async () => {
+  const store = createRoomStore({ farkleDelayMs: null });
+  const s = createServer({ store, staticDir: path.join(__dirname, '..', 'site'), createLimit: 1 });   // 20 shared, 1 per address
+  await new Promise(r => s.listen(0, '127.0.0.1', r));
+  try {
+    const base = `http://127.0.0.1:${s.address().port}`;
+    assert.equal((await post(base, '/api/rooms', { name: 'A' })).status, 201);
+    for (let i = 0; i < 30; i++) assert.equal((await post(base, '/api/rooms', { name: 'B' })).status, 429);
+    assert.equal(store.create('direct').code.length, 4);          // the store itself still has room
+  } finally { s.closeAllConnections(); s.close(); }
+});
