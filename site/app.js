@@ -5,10 +5,10 @@
   const PIPS = { 1: [4], 2: [2, 6], 3: [2, 4, 6], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
   const $ = id => document.getElementById(id);
 
-  let game = null, rolling = false, botTimer = null, botPhase = 'select', landing = new Set();
+  let game = null, net = null, rolling = false, botTimer = null, botPhase = 'select', landing = new Set();
   let note = null;                                  // { text, cls } shown in the status line for one render
 
-  const screens = { start: $('screen-start'), game: $('screen-game'), end: $('screen-end') };
+  const screens = { start: $('screen-start'), online: $('screen-online'), lobby: $('screen-lobby'), game: $('screen-game'), end: $('screen-end') };
   function show(name) { Object.keys(screens).forEach(k => { screens[k].hidden = k !== name; }); }
 
   const store = {
@@ -77,15 +77,18 @@
       pip.className = 'pip ' + (PIPS[v].includes(p) ? 'pip-on' : 'pip-off');
       b.appendChild(pip);
     });
-    if (canPick && !kept) b.addEventListener('click', () => { note = null; G.toggle(game, i); save(); render(); });
+    if (canPick && !kept) b.addEventListener('click', () => {
+      if (net) { net.send({ type: 'select', index: i }); return; }
+      note = null; G.toggle(game, i); save(); render();
+    });
     return b;
   }
 
   function render() {
     const g = game;
     if (!g) return;
-    const cur = g.players[g.current], isBot = Boolean(cur.bot);
-    const myTurn = !isBot;
+    const cur = g.players[g.current], isBot = !net && Boolean(cur.bot);
+    const myTurn = net ? net.you === g.current : !isBot;
     const canPick = myTurn && g.phase === 'pick' && !rolling;
     const farkled = g.phase === 'farkled' && !rolling;
 
@@ -113,9 +116,9 @@
     const st = $('status');
     let text = '', cls = '';
     if (note && !rolling) { text = note.text; cls = note.cls; }
-    else if (farkled) { text = `Farkel! ${cur.name} loses ${fmt(g.lastEvent.lost)} points.`; cls = 'bad'; }
-    else if (isBot) text = `${cur.name} is playing…`;
-    else if (g.phase === 'roll') text = `${cur.name}, roll to start your turn.`;
+    else if (farkled) { text = `Farkel! ${g.players[g.lastEvent.player].name} loses ${fmt(g.lastEvent.lost)} points.`; cls = 'bad'; }
+    else if (!myTurn && g.phase !== 'farkled') text = `${cur.name} is playing…`;
+    else if (g.phase === 'roll') text = `${lastLine(g)}${cur.name}, roll to start your turn.`;
     else if (rolling) text = '';
     else if (!g.sel.some(Boolean)) text = 'Tap the dice that score.';
     else if (sel === null) text = 'Every selected die has to score.';
@@ -126,7 +129,7 @@
     const roll = $('btn-roll'), bank = $('btn-bank');
     roll.classList.remove('wide'); bank.hidden = false; bank.classList.remove('btn-bank-ready');
     if (farkled || (g.phase === 'farkled' && rolling)) {
-      roll.textContent = 'Next player'; roll.disabled = isBot || rolling; bank.hidden = true; roll.classList.add('wide');
+      roll.textContent = 'Next player'; roll.disabled = !myTurn || rolling; bank.hidden = true; roll.classList.add('wide');
     } else if (g.phase === 'roll') {
       roll.textContent = 'Roll'; roll.disabled = !myTurn || rolling; bank.hidden = true; roll.classList.add('wide');
     } else {
@@ -142,16 +145,27 @@
     maybeBot();
   }
 
+  // The result of the previous turn, shown while the next player has not rolled yet.
+  function lastLine(g) {
+    const e = g.lastEvent;
+    if (!e || g.dice.some(Boolean)) return '';
+    const who = g.players[e.player].name;
+    return e.type === 'bank' ? `${who} banked ${fmt(e.points)}. ` : `${who} farkeled and lost ${fmt(e.lost)}. `;
+  }
+
   // --- Actions ---
   // Rolls the game dice, then tumbles the free ones and settles them left to right.
   function animateRoll(done) {
     const was = game.locked.every(Boolean) ? [0, 1, 2, 3, 4, 5] : game.locked.map((l, i) => (l ? -1 : i)).filter(i => i >= 0);
     G.roll(game);
     save();
+    playRoll(was, done);
+  }
+
+  // The tumble: the dice in `was` spin, then settle left to right on the values already in `game`.
+  function playRoll(was, done) {
     if (reduced()) { render(); if (done) done(); return; }
     rolling = true;
-    // while rolling, show the free dice as tumbling and keep the phase from reading as a farkle
-    const final = game.dice.slice();
     render();
     const stopAt = {};
     was.forEach((d, n) => { stopAt[d] = 450 + n * 90; });
@@ -162,7 +176,7 @@
         const i = Number(btn.dataset.index);
         if (!(i in stopAt)) return;
         if (t >= stopAt[i]) {
-          if (btn.classList.contains('rolling')) { btn.classList.remove('rolling'); face(btn, final[i]); }
+          if (btn.classList.contains('rolling')) { btn.classList.remove('rolling'); face(btn, game.dice[i]); }
         } else face(btn, Math.floor(Math.random() * 6) + 1);
       });
     };
@@ -178,31 +192,32 @@
   }
 
   function keepAndRoll() {
+    if (net) { net.send({ type: 'keep' }); return; }
     G.lock(game);
     if (game.hot) note = { text: 'Hot dice! Six fresh dice.', cls: 'good' };
     animateRoll();
   }
   function bankNow() {
-    const who = game.players[game.current].name;
+    if (net) { net.send({ type: 'bank' }); return; }
     G.bank(game);
     save();
     if (G.isOver(game)) { store.del(KEY_SAVED); endScreen(); return; }
-    note = { text: `${who} banked ${fmt(game.lastEvent.points)}.`, cls: 'good' };
     render();
   }
 
   $('btn-roll').addEventListener('click', () => {
     if (!game || rolling) return;
     note = null;
+    if (net) { net.send({ type: game.phase === 'farkled' ? 'next' : 'roll' }); return; }
     if (game.phase === 'farkled') { G.nextAfterFarkle(game); save(); if (G.isOver(game)) endScreen(); else render(); }
     else if (game.phase === 'roll') animateRoll();
     else if (game.phase === 'pick') keepAndRoll();
   });
-  $('btn-bank').addEventListener('click', () => { if (game && !rolling && G.canBank(game)) bankNow(); });
+  $('btn-bank').addEventListener('click', () => { if (game && !rolling && (net || G.canBank(game))) bankNow(); });
 
   // --- Bot ---
   function maybeBot() {
-    if (botTimer || rolling || !game || screens.game.hidden || game.phase === 'over' || !game.players[game.current].bot) return;
+    if (net || botTimer || rolling || !game || screens.game.hidden || game.phase === 'over' || !game.players[game.current].bot) return;
     const ref = game;
     botTimer = setTimeout(() => {
       botTimer = null;
@@ -230,6 +245,10 @@
 
   // --- End ---
   function endScreen() {
+    const online = Boolean(net);
+    $('btn-again').hidden = online;
+    $('btn-setup').hidden = online;
+    $('btn-leave-end').hidden = !online;
     const sorted = [...game.players].sort((a, b) => b.total - a.total);
     $('winner-text').textContent = `${G.winner(game).name} wins!`;
     const body = $('standings');
@@ -263,13 +282,41 @@
   $('btn-close-menu').addEventListener('click', () => dlg($('menu-dialog'), false));
   $('btn-quit').addEventListener('click', () => {
     dlg($('menu-dialog'), false);
+    if (net) { if (confirm('Leave this online room?')) net.leave(); return; }
     if (confirm('Leave this game and return to setup?')) { renderInputs(store.get(KEY_NAMES) || ['Player 1']); checkResume(); show('start'); }
   });
   $('btn-again').addEventListener('click', () => {
     const bot = game.players.findIndex(p => p.bot);
     start(game.players.map(p => p.name), bot >= 0 ? bot : undefined);
   });
+  $('btn-leave-end').addEventListener('click', () => { if (net) net.leave(); });
   $('btn-setup').addEventListener('click', () => { renderInputs(store.get(KEY_NAMES) || ['Player 1']); checkResume(); show('start'); });
+
+  // --- Online (driven by online.js) ---
+  // Which dice just rolled, judged from the previous and the new server state.
+  function rolledDice(prev, g) {
+    if (!prev || g.phase === 'roll' || g.phase === 'over') return [];
+    const free = g.locked.map((l, i) => (l ? -1 : i)).filter(i => i >= 0);
+    if (prev.phase === 'roll') return free;
+    if (prev.phase === 'pick' && prev.current === g.current && g.locked.filter(Boolean).length !== prev.locked.filter(Boolean).length) return free;
+    return [];
+  }
+
+  window.FarkelApp = {
+    showScreen(name) { show(name); },
+    enterOnline(view, send, leave) {
+      const prev = net ? game : null;
+      net = { send, leave, you: view.you };
+      game = view.game;
+      if (view.phase === 'over') { endScreen(); return; }
+      show('game');
+      const was = rolledDice(prev, game);
+      if (was.length) playRoll(was); else render();
+    },
+    exitOnline() { net = null; game = null; rolling = false; },
+    leave() { if (net) net.leave(); },
+    status(text) { note = { text, cls: 'bad' }; if (game) render(); }
+  };
 
   const saved = store.get(KEY_NAMES);
   renderInputs(Array.isArray(saved) && saved.length && saved.length <= 4 ? saved : ['Player 1']);

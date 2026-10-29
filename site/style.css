@@ -150,3 +150,18 @@ body {
   .die.rolling, .die.land, .dice.busted .die { animation: none !important; }
   .die, .btn { transition: none !important; }
 }
+
+/* Online */
+.field { display: flex; flex-direction: column; gap: 6px; color: var(--text); }
+.field input, .join-row input {
+  font: inherit; font-size: 1rem; padding: 12px; color: var(--text-hi);
+  background: var(--card-hi); border: 1px solid var(--border); border-radius: 6px; min-width: 0;
+}
+.join-row input { flex: 1; text-transform: uppercase; letter-spacing: 0.2em; text-align: center; }
+.join-row .btn { flex: 0 0 auto; }
+.error { margin: 0; color: var(--pink); }
+.code { color: var(--yellow); letter-spacing: 0.2em; }
+.lobby-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.lobby-list li { display: flex; justify-content: space-between; gap: 8px; padding: 10px 12px; background: var(--card-hi); border: 1px solid var(--border); border-radius: 6px; color: var(--text-hi); }
+.tag { color: var(--green); font-size: 0.8rem; }
+.reconnecting { position: fixed; top: calc(8px + var(--sat)); left: 50%; transform: translateX(-50%); z-index: 5; background: var(--yellow); color: #1b1c17; padding: 6px 12px; border-radius: 6px; font-weight: 600; }

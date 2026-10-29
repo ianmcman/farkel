@@ -1,4 +1,4 @@
-const CACHE = 'farkel-v2';
+const CACHE = 'farkel-v3';
 const PRECACHE = [
   '/',
   '/index.html',
@@ -8,6 +8,7 @@ const PRECACHE = [
   '/score.js',
   '/game.js',
   '/bot.js',
+  '/online.js',
   '/manifest.webmanifest',
   '/fonts/JetBrainsMono-Regular.woff2',
   '/icons/icon-192.png',

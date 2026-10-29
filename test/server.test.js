@@ -2,12 +2,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { createServer } = require('../server/server.js');
+const { createRoomStore } = require('../server/rooms.js');
 
-async function withServer(fn) {
-  const s = createServer(path.join(__dirname, '..', 'site'));
+async function withServer(fn, store = createRoomStore({ farkleDelayMs: null })) {
+  const s = createServer({ store, staticDir: path.join(__dirname, '..', 'site') });
   await new Promise(r => s.listen(0, '127.0.0.1', r));
-  try { await fn(`http://127.0.0.1:${s.address().port}`); } finally { s.close(); }
+  try { await fn(`http://127.0.0.1:${s.address().port}`); } finally { s.closeAllConnections(); s.close(); }
 }
+const post = (base, url, body, token) => fetch(base + url, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { 'x-token': token } : {}) }, body: JSON.stringify(body || {}) });
 
 test('serves the page, scripts and health check', () => withServer(async base => {
   const home = await fetch(base + '/');
@@ -22,4 +24,36 @@ test('blocks traversal and bad encoding', () => withServer(async base => {
   assert.equal((await fetch(base + '/%2e%2e/package.json')).status, 404);
   assert.equal((await fetch(base + '/%E0%A4%A')).status, 400);
   assert.equal((await fetch(base + '/', { method: 'POST' })).status, 405);
+}));
+
+test('create, join, start and play over HTTP', () => withServer(async base => {
+  const c = await (await post(base, '/api/rooms', { name: 'Ann' })).json();
+  assert.match(c.code, /^[A-Z2-9]{4}$/);
+  const j = await (await post(base, `/api/rooms/${c.code}/join`, { name: 'Bob' })).json();
+  assert.equal((await post(base, `/api/rooms/${c.code}/start`, {}, j.token)).status, 403);
+  assert.equal((await post(base, `/api/rooms/${c.code}/start`, {}, c.token)).status, 200);
+  assert.equal((await post(base, `/api/rooms/${c.code}/act`, { type: 'roll' }, j.token)).status, 409);   // not Bob's turn
+  assert.equal((await post(base, `/api/rooms/${c.code}/act`, { type: 'roll' }, c.token)).status, 200);
+  assert.equal((await post(base, `/api/rooms/${c.code}/act`, { type: 'bogus' }, c.token)).status, 400);
+}));
+
+test('the event stream sends the player view and never other players\' tokens', () => withServer(async base => {
+  const c = await (await post(base, '/api/rooms', { name: 'Ann' })).json();
+  const res = await fetch(`${base}/api/rooms/${c.code}/events?token=${c.token}`);
+  assert.equal(res.status, 200);
+  const reader = res.body.getReader();
+  const text = new TextDecoder().decode((await reader.read()).value);
+  await reader.cancel();
+  const view = JSON.parse(text.replace(/^data: /, ''));
+  assert.equal(view.phase, 'lobby');
+  assert.equal(view.you, 0);
+  assert.ok(!text.includes(c.token));
+  assert.equal((await fetch(`${base}/api/rooms/${c.code}/events`)).status, 403);
+  assert.equal((await fetch(`${base}/api/rooms/ZZZZ/events?token=x`)).status, 404);
+}));
+
+test('rejects oversized and malformed bodies', () => withServer(async base => {
+  assert.equal((await post(base, '/api/rooms', { name: 'x'.repeat(9000) })).status, 413);
+  const bad = await fetch(base + '/api/rooms', { method: 'POST', body: '{nope' });
+  assert.equal(bad.status, 400);
 }));

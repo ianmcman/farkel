@@ -12,18 +12,97 @@ const MIME = {
   '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json; charset=utf-8', '.txt': 'text/plain; charset=utf-8'
 };
 
-function createServer(staticDir) {
+function sendJson(res, status, data) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...HEADERS });
+  res.end(JSON.stringify(data));
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let size = 0, tooLarge = false;
+    const chunks = [];
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > 4096) tooLarge = true; else chunks.push(chunk);
+    });
+    req.on('end', () => {
+      if (tooLarge) return reject(Object.assign(new Error('Payload Too Large'), { status: 413 }));
+      const raw = Buffer.concat(chunks).toString('utf8');
+      if (!raw.trim()) return resolve({});
+      try { resolve(JSON.parse(raw)); } catch { reject(Object.assign(new Error('Invalid JSON'), { status: 400 })); }
+    });
+    req.on('error', reject);
+  });
+}
+
+function createServer({ store, staticDir }) {
   const root = path.resolve(staticDir);
-  return http.createServer((req, res) => {
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      res.writeHead(405, { Allow: 'GET, HEAD', ...HEADERS });
-      return res.end();
+
+  async function api(req, res, pathname, url) {
+    const method = req.method;
+    const tokenOf = () => req.headers['x-token'];
+    try {
+      if (method === 'POST' && pathname === '/api/rooms') {
+        const body = await readJsonBody(req);
+        return sendJson(res, 201, store.create(body.name));
+      }
+      const m = pathname.match(/^\/api\/rooms\/([^/]+)\/(join|start|act|events)$/);
+      if (!m) return sendJson(res, 404, { error: 'Not Found' });
+      const code = decodeURIComponent(m[1]);
+      if (method === 'POST' && m[2] === 'join') {
+        const body = await readJsonBody(req);
+        return sendJson(res, 200, store.join(code, body.name));
+      }
+      if (method === 'POST' && m[2] === 'start') {
+        await readJsonBody(req);
+        store.start(code, tokenOf());
+        return sendJson(res, 200, {});
+      }
+      if (method === 'POST' && m[2] === 'act') {
+        const body = await readJsonBody(req);
+        store.act(code, tokenOf(), body);
+        return sendJson(res, 200, {});
+      }
+      if (method === 'GET' && m[2] === 'events') return events(req, res, code, url.searchParams.get('token'));
+      return sendJson(res, 404, { error: 'Not Found' });
+    } catch (err) {
+      sendJson(res, err.status || 500, { error: err.status ? err.message : 'Internal error' });
     }
-    let pathname;
-    try { pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { pathname = null; }
+  }
+
+  function events(req, res, code, token) {
+    if (!token) return sendJson(res, 403, { error: 'Token is required' });
+    let initial;
+    try { initial = store.view(code, token); } catch (err) { return sendJson(res, err.status || 500, { error: err.message }); }
+    res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', Connection: 'keep-alive', ...HEADERS });
+    res.write(`data: ${JSON.stringify(initial)}\n\n`);
+    let closed = false;
+    const unsubscribe = store.subscribe(code, () => {
+      try { res.write(`data: ${JSON.stringify(store.view(code, token))}\n\n`); } catch { cleanup(); res.end(); }
+    });
+    const ping = setInterval(() => res.write(': ping\n\n'), 20000);
+    ping.unref();
+    function cleanup() {
+      if (closed) return;
+      closed = true;
+      clearInterval(ping);
+      unsubscribe();
+    }
+    req.on('close', cleanup);
+    req.on('error', cleanup);
+  }
+
+  return http.createServer((req, res) => {
+    let url, pathname;
+    try { url = new URL(req.url, 'http://x'); pathname = decodeURIComponent(url.pathname); } catch { pathname = null; }
     if (pathname === null || pathname.includes('\0')) {
       res.writeHead(400, HEADERS);
       return res.end('Bad Request');
+    }
+    if (pathname.startsWith('/api/')) return api(req, res, pathname, url);
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.writeHead(405, { Allow: 'GET, HEAD', ...HEADERS });
+      return res.end();
     }
     if (pathname === '/healthz') {
       res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', ...HEADERS });
@@ -50,6 +129,9 @@ function createServer(staticDir) {
 module.exports = { createServer };
 
 if (require.main === module) {
+  const { createRoomStore } = require('./rooms.js');
+  const store = createRoomStore();
+  setInterval(() => store.sweep(), 10 * 60 * 1000).unref();
   const port = Number(process.env.PORT) || 8080;
-  createServer(path.join(__dirname, '..', 'site')).listen(port, '0.0.0.0', () => console.log(`Farkel listening on ${port}`));
+  createServer({ store, staticDir: path.join(__dirname, '..', 'site') }).listen(port, '0.0.0.0', () => console.log(`Farkel listening on ${port}`));
 }
