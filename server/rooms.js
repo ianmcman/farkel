@@ -75,7 +75,7 @@ function createRoomStore(options = {}) {
 
   function start(code, token) {
     const room = getRoom(code);
-    if (playerIndex(room, token) !== 0) throw httpError(403, 'Only the host can start the game');
+    if (playerIndex(room, token) !== 0) throw httpError(409, 'Only the host can start the game');
     if (room.phase !== 'lobby') throw httpError(409, 'Game already started');
     if (room.players.length < 2) throw httpError(409, 'Need at least 2 players to start');
     room.phase = 'playing';
