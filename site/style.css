@@ -165,3 +165,30 @@ body {
 .lobby-list li { display: flex; justify-content: space-between; gap: 8px; padding: 10px 12px; background: var(--card-hi); border: 1px solid var(--border); border-radius: 6px; color: var(--text-hi); }
 .tag { color: var(--green); font-size: 0.8rem; }
 .reconnecting { position: fixed; top: calc(8px + var(--sat)); left: 50%; transform: translateX(-50%); z-index: 5; background: var(--yellow); color: #1b1c17; padding: 6px 12px; border-radius: 6px; font-weight: 600; }
+
+/* Desktop: wide layout, players on the left, dice and actions on the right */
+@media (min-width: 900px) and (min-height: 600px) {
+  :root { --die: clamp(80px, min(calc((100vw - 520px) / 3.6), calc((100dvh - 330px) / 2.2)), 140px); }
+  body { font-size: 15px; }
+  #app { max-width: 1100px; }
+  .screen:not(.game) { width: min(600px, 100%); margin: 0 auto; padding-top: 40px; }
+  .title { font-size: 2.1rem; }
+  .card { padding: 22px; }
+  .game {
+    display: grid; grid-template-columns: 280px minmax(0, 1fr); grid-template-rows: auto 1fr auto auto;
+    grid-template-areas: "sb turn" "sb dice" "sb act" "sb bar";
+    column-gap: 40px; row-gap: 12px; align-content: stretch; padding-top: 32px; padding-bottom: 24px;
+  }
+  .scoreboard { grid-area: sb; flex-direction: column; align-self: start; }
+  .chip { flex: 0 0 auto; padding: 12px 14px; }
+  .chip-total { font-size: 1.6rem; }
+  .turn-box { grid-area: turn; }
+  .dice { grid-area: dice; }
+  .actions { grid-area: act; width: min(560px, 100%); justify-self: center; }
+  .btn-action { min-height: 76px; }
+  .bottom-bar { grid-area: bar; margin: 0; justify-self: center; width: min(360px, 100%); border: 1px solid var(--border); border-radius: 10px; padding: 4px 8px; }
+  .reconnecting { grid-area: auto; }
+  .btn:not(:disabled):hover { filter: brightness(1.12); }
+  .die:not(.kept):hover { border-color: var(--primary); }
+  .bar-btn:hover { color: var(--text-hi); }
+}

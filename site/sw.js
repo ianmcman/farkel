@@ -1,4 +1,4 @@
-const CACHE = 'farkel-v7';
+const CACHE = 'farkel-v9';
 const PRECACHE = [
   '/',
   '/index.html',
@@ -14,7 +14,9 @@ const PRECACHE = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/icon-maskable-512.png',
-  '/icons/apple-touch-icon.png'
+  '/icons/apple-touch-icon.png',
+  '/icons/icon-32.png',
+  '/favicon.ico'
 ];
 
 self.addEventListener('install', event => {

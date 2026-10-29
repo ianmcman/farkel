@@ -323,3 +323,17 @@
   checkResume();
   show('start');
 })();
+
+// Desktop keyboard shortcuts. Space or R rolls, B or Enter banks, 1-6 toggles a die.
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.repeat || document.querySelector('dialog[open]') || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  const game = document.getElementById('screen-game');
+  if (!game || game.hidden) return;
+  const press = el => { if (el && !el.hidden && !el.disabled) { e.preventDefault(); el.click(); } };
+  const nth = (sel, n) => press(document.querySelectorAll(sel)[n - 1]);
+  const k = e.key.toLowerCase();
+  if (e.target.tagName === 'BUTTON' && (k === ' ' || k === 'enter')) return;   // the focused button handles its own activation
+  if (k === ' ' || k === 'r') press(document.getElementById('btn-roll'));
+  else if (k === 'b' || k === 'enter') press(document.getElementById('btn-bank'));
+  else if (/^[1-6]$/.test(k)) nth('#dice .die', +k);
+});
