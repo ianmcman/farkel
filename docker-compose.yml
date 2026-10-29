@@ -1,4 +1,4 @@
-# Farmer Farkle: static site served by a small Node server (no dependencies). Public through SWAG at farkel.ianmcmanus.net.
+# Farkel: static site served by a small Node server (no dependencies). Public through SWAG at farkel.ianmcmanus.net.
 services:
   farkel:
     build: .

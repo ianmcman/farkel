@@ -106,14 +106,14 @@
 
     const dice = $('dice');
     dice.innerHTML = '';
-    dice.classList.toggle('spoiled', farkled);
+    dice.classList.toggle('busted', farkled);
     for (let i = 0; i < G.DICE; i++) dice.appendChild(dieEl(i, g, canPick));
 
     // status line
     const st = $('status');
     let text = '', cls = '';
     if (note && !rolling) { text = note.text; cls = note.cls; }
-    else if (farkled) { text = `Farkle! ${cur.name} spoils ${fmt(g.lastEvent.lost)} points.`; cls = 'bad'; }
+    else if (farkled) { text = `Farkel! ${cur.name} loses ${fmt(g.lastEvent.lost)} points.`; cls = 'bad'; }
     else if (isBot) text = `${cur.name} is playing…`;
     else if (g.phase === 'roll') text = `${cur.name}, roll to start your turn.`;
     else if (rolling) text = '';

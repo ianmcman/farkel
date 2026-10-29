@@ -8,17 +8,17 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Farkle">
+  <meta name="apple-mobile-web-app-title" content="Farkel">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-  <meta name="description" content="Farmer Farkle: the dice game for 1 to 4 players, or against a bot.">
-  <title>Farmer Farkle</title>
+  <meta name="description" content="Farkel: the dice game for 1 to 4 players, or against a bot.">
+  <title>Farkel</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main id="app">
     <section id="screen-start" class="screen">
-      <h1 class="title">Farmer Farkle</h1>
-      <p class="tagline">Roll six dice, set aside what scores, and bank the harvest before it spoils.</p>
+      <h1 class="title">Farkel</h1>
+      <p class="tagline">Roll six dice, set aside what scores, and bank your points before a bad roll wipes them out.</p>
 
       <div id="resume-banner" class="card" hidden>
         <h2 class="card-title">Game in progress</h2>
@@ -43,9 +43,9 @@
 
     <section id="screen-game" class="screen game" hidden>
       <div id="scoreboard" class="scoreboard"></div>
-      <div class="harvest">
-        <div class="harvest-label">This turn</div>
-        <div id="turn-score" class="harvest-score">0</div>
+      <div class="turn-box">
+        <div class="turn-label">This turn</div>
+        <div id="turn-score" class="turn-score-num">0</div>
         <p id="status" class="status" aria-live="polite"></p>
       </div>
       <div id="dice" class="dice"></div>
@@ -75,7 +75,7 @@
       <li>Roll six dice. Tap the dice that score, then roll the rest or bank.</li>
       <li>1 is 100, 5 is 50. Three of a kind is face x 100 (three 1s is 1000). Four, five or six of a kind: 1000, 2000, 3000.</li>
       <li>1-2-3-4-5-6, three pairs, or four of a kind plus a pair: 1500. Two triples: 2500.</li>
-      <li>If a roll has nothing that scores, that is a Farkle and the turn's points are lost.</li>
+      <li>If a roll has nothing that scores, that is a Farkel and the turn's points are lost.</li>
       <li>Score with all six dice for hot dice: roll all six again.</li>
       <li>You need 500 in one turn to get on the board. First to 10,000 triggers one last turn for everyone else.</li>
     </ul>

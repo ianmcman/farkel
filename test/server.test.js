@@ -12,7 +12,7 @@ async function withServer(fn) {
 test('serves the page, scripts and health check', () => withServer(async base => {
   const home = await fetch(base + '/');
   assert.equal(home.status, 200);
-  assert.match(await home.text(), /Farmer Farkle/);
+  assert.match(await home.text(), /Farkel/);
   assert.equal((await fetch(base + '/game.js')).status, 200);
   assert.equal(await (await fetch(base + '/healthz')).text(), 'ok');
   assert.match((await fetch(base + '/')).headers.get('content-security-policy'), /default-src 'self'/);

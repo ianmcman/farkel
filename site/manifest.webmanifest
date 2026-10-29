@@ -1,7 +1,7 @@
 {
-  "name": "Farmer Farkle",
-  "short_name": "Farkle",
-  "description": "Farmer Farkle: the dice game for 1 to 4 players, or against a bot.",
+  "name": "Farkel",
+  "short_name": "Farkel",
+  "description": "Farkel: the dice game for 1 to 4 players, or against a bot.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

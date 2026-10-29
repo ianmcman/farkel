@@ -1,4 +1,4 @@
-const CACHE = 'farkel-v1';
+const CACHE = 'farkel-v2';
 const PRECACHE = [
   '/',
   '/index.html',

@@ -82,9 +82,9 @@ body {
 .chip-total { color: var(--text-hi); font-size: 1.25rem; font-weight: 700; }
 .chip-off { color: var(--dim); font-size: 0.68rem; }
 
-.harvest { text-align: center; }
-.harvest-label { color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.75rem; }
-.harvest-score { color: var(--yellow); font-size: 3rem; font-weight: 800; line-height: 1.1; }
+.turn-box { text-align: center; }
+.turn-label { color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.75rem; }
+.turn-score-num { color: var(--yellow); font-size: 3rem; font-weight: 800; line-height: 1.1; }
 .status { margin: 4px 0 0; min-height: 2.6em; color: var(--text); }
 .status.bad { color: var(--pink); }
 .status.good { color: var(--green); }
@@ -145,8 +145,8 @@ body {
 }
 .die.rolling { animation: tumble 380ms linear infinite; }
 .die.land { animation: land 260ms ease-out; }
-.dice.spoiled .die { animation: shake 400ms ease; }
+.dice.busted .die { animation: shake 400ms ease; }
 @media (prefers-reduced-motion: reduce) {
-  .die.rolling, .die.land, .dice.spoiled .die { animation: none !important; }
+  .die.rolling, .die.land, .dice.busted .die { animation: none !important; }
   .die, .btn { transition: none !important; }
 }
