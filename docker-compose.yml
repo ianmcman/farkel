@@ -1,0 +1,18 @@
+# Farmer Farkle: static site served by a small Node server (no dependencies). Public through SWAG at farkel.ianmcmanus.net.
+services:
+  farkel:
+    build: .
+    image: farkel:local
+    container_name: farkel
+    ports:
+      - "192.168.2.30:${FARKEL_PORT:-8101}:8080"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 128m
+    cpus: 0.5
